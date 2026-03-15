@@ -136,10 +136,9 @@ describe("baton CLI", () => {
     expect(ghLog).toContain("repo clone mock-user/baton-specs");
 
     const gitLog = fs.readFileSync(path.join(env.rootDir, "git.log"), "utf8");
-    expect(gitLog).toContain("branch --show-current");
     expect(gitLog).toContain("add -A");
     expect(gitLog).toContain("diff --cached --quiet");
-    expect(gitLog).toContain("pull");
+    expect(gitLog).toContain("pull --rebase");
     expect(gitLog).toContain("push");
   });
 

@@ -200,8 +200,7 @@ async function handleSync(args: string[]) {
   ensureLocalStateIgnored();
   commitPendingSpecsChanges();
 
-  const branch = getCurrentGitBranch(getBatonRoot());
-  runCommand(["git", "pull", "--rebase", "origin", branch], getBatonRoot());
+  runCommand(["git", "pull", "--rebase"], getBatonRoot());
   runCommand(["git", "push", "origin", "HEAD"], getBatonRoot());
 
   console.log(`Synced ${getBatonRoot()}`);
@@ -844,16 +843,6 @@ function commitPendingSpecsChanges() {
     ["git", "commit", "-m", `baton sync ${new Date().toISOString()}`],
     getBatonRoot(),
   );
-}
-
-function getCurrentGitBranch(repoRoot: string) {
-  const result = runCommand(["git", "branch", "--show-current"], repoRoot);
-  const branch = result.stdout.trim();
-  if (!branch) {
-    throw new Error(`Could not determine current branch for ${repoRoot}`);
-  }
-
-  return branch;
 }
 
 function runCommand(cmd: string[], cwd: string) {
