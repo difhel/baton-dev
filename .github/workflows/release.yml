@@ -1,0 +1,76 @@
+name: Build Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-binaries:
+    name: Build executables
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: baton-linux
+          - os: macos-latest
+            artifact: baton-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build executable
+        run: |
+          npm run build-executable
+          mv artifacts/baton artifacts/${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/${{ matrix.artifact }}
+
+  github-release:
+    name: Create GitHub Release
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: baton-linux
+          path: ./artifacts/
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: baton-macos
+          path: ./artifacts/
+
+      - name: Make executables executable
+        run: |
+          chmod +x ./artifacts/baton-linux
+          chmod +x ./artifacts/baton-macos
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ./artifacts/baton-linux
+            ./artifacts/baton-macos
+          generate_release_notes: true
+          draft: false
+          prerelease: false
