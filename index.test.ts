@@ -140,7 +140,8 @@ describe("baton CLI", () => {
     expect(gitLog).toContain("add -A");
     expect(gitLog).toContain("diff --cached --quiet");
     expect(gitLog).toContain("ls-remote --exit-code --heads origin");
-    expect(gitLog).toContain("pull --rebase");
+    expect(gitLog).toContain("fetch origin");
+    expect(gitLog).toContain("rebase origin/HEAD");
     expect(gitLog).toContain("push -u origin HEAD");
   });
 
@@ -153,7 +154,8 @@ describe("baton CLI", () => {
 
     const gitLog = fs.readFileSync(path.join(env.rootDir, "git.log"), "utf8");
     expect(gitLog).toContain("ls-remote --exit-code --heads origin");
-    expect(gitLog).not.toContain("pull --rebase");
+    expect(gitLog).not.toContain("fetch origin");
+    expect(gitLog).not.toContain("rebase origin/HEAD");
     expect(gitLog).toContain("rev-parse --verify HEAD");
     expect(gitLog).toContain("commit --allow-empty -m");
     expect(gitLog).toContain("push -u origin HEAD");
@@ -625,6 +627,8 @@ case "$cmd" in
     fi
     ;;
   add|pull|push)
+    ;;
+  fetch|rebase)
     ;;
   rm)
     repo_root="$(find_repo_root)"

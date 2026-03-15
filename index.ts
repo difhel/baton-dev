@@ -201,7 +201,8 @@ async function handleSync(args: string[]) {
   commitPendingSpecsChanges();
 
   if (remoteHasHeads(getBatonRoot(), "origin")) {
-    runCommand(["git", "pull", "--rebase"], getBatonRoot());
+    runCommand(["git", "fetch", "origin"], getBatonRoot());
+    runCommand(["git", "rebase", "origin/HEAD"], getBatonRoot());
   } else {
     ensureLocalCommitExists(getBatonRoot());
   }
