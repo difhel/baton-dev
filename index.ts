@@ -152,7 +152,7 @@ async function handleAdd(args: string[]) {
 
 async function handleTouch(args: string[]) {
   if (args.length > 1) {
-    throw new Error("Usage: baton touch {id?}");
+    throw new Error("Usage: baton touch [id]");
   }
 
   ensureSpecsRepoReady();
@@ -200,8 +200,13 @@ async function handleSync(args: string[]) {
   ensureLocalStateIgnored();
   commitPendingSpecsChanges();
 
-  runCommand(["git", "pull", "--rebase"], getBatonRoot());
-  runCommand(["git", "push", "origin", "HEAD"], getBatonRoot());
+  if (remoteHasHeads(getBatonRoot(), "origin")) {
+    runCommand(["git", "pull", "--rebase"], getBatonRoot());
+  } else {
+    ensureLocalCommitExists(getBatonRoot());
+  }
+
+  runCommand(["git", "push", "-u", "origin", "HEAD"], getBatonRoot());
 
   console.log(`Synced ${getBatonRoot()}`);
 }
@@ -237,10 +242,10 @@ function printHelp() {
 
 Commands:
   baton ls
-  baton add {id} {path|url}
-  baton touch {id?}
+  baton add <id> <path|url>
+  baton touch [id]
   baton sync [--create]
-  baton run {script}
+  baton run <script>
 `);
 }
 
@@ -843,6 +848,34 @@ function commitPendingSpecsChanges() {
     ["git", "commit", "-m", `baton sync ${new Date().toISOString()}`],
     getBatonRoot(),
   );
+}
+
+function ensureLocalCommitExists(repoRoot: string) {
+  if (hasLocalCommit(repoRoot)) {
+    return;
+  }
+
+  runCommand(["git", "commit", "--allow-empty", "-m", "Initialize baton specs"], repoRoot);
+}
+
+function hasLocalCommit(repoRoot: string) {
+  const result = spawnProcess(["git", "rev-parse", "--verify", "HEAD"], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  return result.exitCode === 0;
+}
+
+function remoteHasHeads(repoRoot: string, remoteName: string) {
+  const result = spawnProcess(["git", "ls-remote", "--exit-code", "--heads", remoteName], {
+    cwd: repoRoot,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  return result.exitCode === 0;
 }
 
 function runCommand(cmd: string[], cwd: string) {

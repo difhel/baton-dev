@@ -122,6 +122,7 @@ describe("baton CLI", () => {
 
   test("sync --create bootstraps the specs repo through mocked gh and git", () => {
     const env = createChroot();
+    fs.writeFileSync(path.join(env.rootDir, "mock-remote-has-heads"), "1\n");
 
     const result = runCli(env, ["sync", "--create"]);
 
@@ -138,8 +139,24 @@ describe("baton CLI", () => {
     const gitLog = fs.readFileSync(path.join(env.rootDir, "git.log"), "utf8");
     expect(gitLog).toContain("add -A");
     expect(gitLog).toContain("diff --cached --quiet");
+    expect(gitLog).toContain("ls-remote --exit-code --heads origin");
     expect(gitLog).toContain("pull --rebase");
-    expect(gitLog).toContain("push");
+    expect(gitLog).toContain("push -u origin HEAD");
+  });
+
+  test("sync --create initializes and pushes when the remote repo is empty", () => {
+    const env = createChroot();
+
+    const result = runCli(env, ["sync", "--create"]);
+
+    expect(result.exitCode).toBe(0);
+
+    const gitLog = fs.readFileSync(path.join(env.rootDir, "git.log"), "utf8");
+    expect(gitLog).toContain("ls-remote --exit-code --heads origin");
+    expect(gitLog).not.toContain("pull --rebase");
+    expect(gitLog).toContain("rev-parse --verify HEAD");
+    expect(gitLog).toContain("commit --allow-empty -m");
+    expect(gitLog).toContain("push -u origin HEAD");
   });
 
   test("ls shows projects and touched repos", () => {
@@ -430,6 +447,7 @@ function createMockBatonRepo(homeDir: string) {
   fs.mkdirSync(path.join(batonRoot, ".git", "info"), { recursive: true });
   fs.mkdirSync(path.join(batonRoot, ".git", "hooks"), { recursive: true });
   fs.writeFileSync(path.join(batonRoot, ".mock-branch"), "main\n");
+  fs.writeFileSync(path.join(batonRoot, ".mock-has-head"), "1\n");
 }
 
 function createMockGitRepo(repoDir: string, originUrl: string) {
@@ -562,6 +580,14 @@ case "$cmd" in
       --show-toplevel)
         find_repo_root
         ;;
+      --verify)
+        repo_root="$(find_repo_root)"
+        if [ "\${3:-}" = "HEAD" ] && [ -f "$repo_root/.mock-has-head" ]; then
+          printf 'mock-head\\n'
+        else
+          exit 1
+        fi
+        ;;
       --git-path)
         repo_root="$(find_repo_root)"
         printf '%s\\n' "$repo_root/.git/\${3:?}"
@@ -621,6 +647,18 @@ case "$cmd" in
   commit)
     repo_root="$(find_repo_root)"
     touch "$repo_root/.mock-commit-ran"
+    touch "$repo_root/.mock-has-head"
+    ;;
+  ls-remote)
+    if [ "\${2:-}" = "--exit-code" ] && [ "\${3:-}" = "--heads" ] && [ "\${4:-}" = "origin" ]; then
+      if [ -f "$MOCK_ROOT/mock-remote-has-heads" ]; then
+        printf 'deadbeef\\trefs/heads/main\\n'
+        exit 0
+      fi
+      exit 2
+    else
+      exit 1
+    fi
     ;;
   show)
     repo_root="$(find_repo_root)"

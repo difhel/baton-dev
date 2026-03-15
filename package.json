@@ -1,6 +1,6 @@
 {
   "name": "baton-dev",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "A CLI for managing private per-project agent specs outside shared repositories",
   "type": "module",
   "main": "dist/index.js",
