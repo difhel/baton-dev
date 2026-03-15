@@ -14,7 +14,6 @@ type BatonProjectConfig = {
 type TouchedRepo = {
   projectId: string;
   repoRoot: string;
-  agentsCreatedByBaton: boolean;
   updatedAt: string;
 };
 
@@ -170,22 +169,16 @@ async function handleTouch(args: string[]) {
 
   const agentsPath = path.join(repoRoot, "AGENTS.md");
   const localState = loadLocalState();
-  const previousTouch = localState.touchedRepos[repoRoot];
   const existingAgentsContent = fs.existsSync(agentsPath)
     ? fs.readFileSync(agentsPath, "utf8")
     : null;
-  const createdByBaton = inferAgentsCreatedByBaton(
-    existingAgentsContent,
-    previousTouch?.agentsCreatedByBaton ?? false,
-  );
 
   writeTouchedAgentsFile(agentsPath, existingAgentsContent);
-  installGitHooks(repoRoot, createdByBaton);
+  installGitHooks(repoRoot);
 
   localState.touchedRepos[repoRoot] = {
     projectId: project.id,
     repoRoot,
-    agentsCreatedByBaton: createdByBaton,
     updatedAt: new Date().toISOString(),
   };
   saveLocalState(localState);
@@ -469,19 +462,6 @@ function ensureGitInfoExclude(repoRoot: string, entry: string) {
   appendLineIfMissing(excludePath, entry.trim());
 }
 
-function inferAgentsCreatedByBaton(existingContent: string | null, previousValue: boolean) {
-  if (existingContent === null) {
-    return true;
-  }
-
-  const stripped = stripBatonBlock(existingContent).trim();
-  if (stripped.length > 0) {
-    return false;
-  }
-
-  return previousValue;
-}
-
 function writeTouchedAgentsFile(agentsPath: string, existingContent: string | null) {
   const stripped = stripBatonBlock(existingContent ?? "");
   const hasUserContent = stripped.trim().length > 0;
@@ -496,15 +476,11 @@ function stripBatonBlock(content: string) {
   return stripMarkedBlock(content, BATON_START_MARKER, BATON_END_MARKER, "AGENTS.md");
 }
 
-function installGitHooks(repoRoot: string, createdByBaton: boolean) {
+function installGitHooks(repoRoot: string) {
   const hooksDir = resolveGitPath(repoRoot, "hooks");
   const helperPath = path.join(hooksDir, "baton-hook.sh");
-  const metaDir = resolveGitPath(repoRoot, "baton");
-  const metaPath = path.join(metaDir, "meta");
 
   fs.mkdirSync(hooksDir, { recursive: true });
-  fs.mkdirSync(metaDir, { recursive: true });
-  fs.writeFileSync(metaPath, `agents_created_by_baton=${createdByBaton ? "1" : "0"}\n`);
   fs.writeFileSync(helperPath, getHookHelperScript());
   fs.chmodSync(helperPath, 0o755);
 
@@ -549,7 +525,6 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 AGENTS_PATH="$REPO_ROOT/AGENTS.md"
 BATON_DIR="$(git rev-parse --git-path baton)"
 RESTORE_PATH="$BATON_DIR/agents.restore"
-META_PATH="$BATON_DIR/meta"
 AGENTS_RELATIVE_PATH="AGENTS.md"
 
 mkdir -p "$BATON_DIR"
@@ -643,12 +618,7 @@ case "$ACTION" in
     if [ -s "$TMP_PATH" ]; then
       write_index_from_file "$TMP_PATH"
     else
-      agents_created_by_baton=0
-      if [ -f "$META_PATH" ]; then
-        . "$META_PATH"
-      fi
-
-      if [ "$agents_created_by_baton" = "1" ] && ! git cat-file -e "HEAD:$AGENTS_RELATIVE_PATH" 2>/dev/null; then
+      if ! git cat-file -e "HEAD:$AGENTS_RELATIVE_PATH" 2>/dev/null; then
         git rm --cached --quiet --force --ignore-unmatch -- "$AGENTS_RELATIVE_PATH" >/dev/null 2>&1 || true
       else
         : > "$TMP_PATH"
@@ -771,7 +741,7 @@ function ensureLocalState(value: unknown, source: string): LocalState {
         throw new Error(`Invalid local state in ${source}: touched repo ${repoRoot} has invalid ids`);
       }
 
-      if (typeof item.agentsCreatedByBaton !== "boolean" || typeof item.updatedAt !== "string") {
+      if (typeof item.updatedAt !== "string") {
         throw new Error(`Invalid local state in ${source}: touched repo ${repoRoot} has invalid metadata`);
       }
 
@@ -780,7 +750,6 @@ function ensureLocalState(value: unknown, source: string): LocalState {
         {
           projectId: item.projectId,
           repoRoot: item.repoRoot,
-          agentsCreatedByBaton: item.agentsCreatedByBaton,
           updatedAt: item.updatedAt,
         } satisfies TouchedRepo,
       ];
